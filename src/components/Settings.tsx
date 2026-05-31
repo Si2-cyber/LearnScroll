@@ -153,7 +153,7 @@ export default function Settings({
         <div className="rounded-xl border border-[#1A1A1A]/10 bg-white p-5 space-y-4 shadow-sm">
           <div className="flex items-center justify-between pointer-events-none">
             <div className="flex items-center space-x-2.5">
-              <Key className="h-4.5 w-4.5 text-[#1A1A1A]/70" />
+              <Key className="h-5 w-5 text-[#1A1A1A]/70" />
               <h2 className="font-sans text-[13px] font-bold tracking-tight text-[#1A1A1A]">
                 OpenAI API Key (BYOK)
               </h2>
@@ -227,7 +227,7 @@ export default function Settings({
                     id="save-api-key-button"
                     type="submit"
                     disabled={!apiKeyInput.trim()}
-                    className="rounded-lg bg-[#1A1A1A] px-4 py-2 font-sans text-xs font-bold uppercase tracking-wider text-white transition-all hover:bg-[#1A1A1A]/90 active:scale-98 disabled:opacity-45 disabled:hover:bg-[#1A1A1A] cursor-pointer"
+                    className="rounded-lg bg-[#1A1A1A] px-4 py-2 font-sans text-xs font-bold uppercase tracking-wider text-white transition-all hover:bg-[#1A1A1A]/90 active:scale-95 disabled:opacity-45 disabled:hover:bg-[#1A1A1A] cursor-pointer"
                   >
                     Save
                   </button>
@@ -282,7 +282,7 @@ export default function Settings({
                 <button
                   key={topic.name}
                   onClick={() => toggleInterest(topic.name)}
-                  className={`flex items-center space-x-2 rounded-lg border px-3 py-2.5 transition-all outline-none duration-250 ${
+                  className={`flex items-center space-x-2 rounded-lg border px-3 py-2.5 transition-all outline-none duration-200 ${
                     isActive
                       ? 'border-[#1A1A1A] bg-[#1A1A1A]/5 shadow-sm'
                       : 'border-[#1A1A1A]/10 bg-white hover:border-[#1A1A1A]/20'
@@ -305,7 +305,7 @@ export default function Settings({
               Danger Zone
             </h2>
             <p className="font-sans text-[11px] text-red-700/60 font-medium">
-              Clear dynamic tracking metrics, comments, and profile values.
+              Clear dynamic tracking metrics, comments, profile values, and your stored API key.
             </p>
           </div>
 
@@ -313,7 +313,7 @@ export default function Settings({
             <button
               id="confirm-reset-trigger"
               onClick={() => setShowConfirmReset(true)}
-              className="flex w-full items-center justify-center space-x-2 rounded-lg border border-red-250 bg-white py-3 hover:bg-red-50 text-red-700 transition-colors cursor-pointer"
+              className="flex w-full items-center justify-center space-x-2 rounded-lg border border-red-200 bg-white py-3 hover:bg-red-50 text-red-700 transition-colors cursor-pointer"
             >
               <Trash2 className="h-4 w-4 text-red-700" />
               <span className="font-sans text-xs font-bold text-red-800">

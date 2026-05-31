@@ -299,7 +299,7 @@ Your output MUST be a valid JSON object matching this schema:
       const generatedCard: Card = {
         id: `ai-card-${Date.now()}`,
         title: parsed.title,
-        category: parsed.category || selectedCategory,
+        category: selectedCategory,
         paragraphs: parsed.paragraphs || [],
         takeaway: parsed.takeaway || 'Knowledge is compounding.',
         hashtags: parsed.hashtags || ['Learning'],
@@ -310,14 +310,11 @@ Your output MUST be a valid JSON object matching this schema:
       };
 
       // Add to cards. Place at the end of pre-seeded cards so it appends nicely.
-      setCards((prev) => [...prev, generatedCard]);
+      setCards((prevCards) => [...prevCards, generatedCard]);
 
-      // Scroll smoothly to this newly generated card
+      // Scroll smoothly after React renders the new card without using stale filtered feed state.
       setTimeout(() => {
-        const itemIdx = filteredFeedCards.length; // Approximate position
-        setActiveIndex(itemIdx);
         if (feedScrollRef.current) {
-          const clientHeight = feedScrollRef.current.clientHeight;
           feedScrollRef.current.scrollTop = feedScrollRef.current.scrollHeight;
         }
       }, 150);
@@ -355,6 +352,7 @@ Your output MUST be a valid JSON object matching this schema:
       email: 'user@learnscroll.app',
       interests: [],
       subscribedChannels: [],
+      openaiApiKey: undefined,
     });
     setCards(DEFAULT_CARDS);
     setComments([]);
@@ -397,7 +395,7 @@ Your output MUST be a valid JSON object matching this schema:
           <button
             id="status-badge-loaded"
             onClick={() => setActiveTab('settings')}
-            className="flex items-center space-x-1.5 rounded-full bg-emerald-500/5 border border-emerald-500/30 px-3 py-1.5 hover:bg-emerald-550/10 transition-colors duration-200"
+            className="flex items-center space-x-1.5 rounded-full bg-emerald-500/5 border border-emerald-500/30 px-3 py-1.5 hover:bg-emerald-500/10 transition-colors duration-200"
           >
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -626,7 +624,7 @@ Your output MUST be a valid JSON object matching this schema:
             activeTab === 'explore' ? 'text-[#1A1A1A] font-black' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]'
           }`}
         >
-          <Sparkles className="h-4.5 w-4.5" />
+          <Sparkles className="h-5 w-5" />
           <span className="font-sans text-[9.5px] mt-1 font-bold uppercase tracking-wider">Explore</span>
         </button>
 
@@ -638,7 +636,7 @@ Your output MUST be a valid JSON object matching this schema:
             activeTab === 'bookmarks' ? 'text-[#1A1A1A] font-black' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]'
           }`}
         >
-          <Bookmark className="h-4.5 w-4.5" />
+          <Bookmark className="h-5 w-5" />
           <span className="font-sans text-[9.5px] mt-1 font-bold uppercase tracking-wider">Syllabus</span>
         </button>
 
@@ -650,7 +648,7 @@ Your output MUST be a valid JSON object matching this schema:
             activeTab === 'settings' ? 'text-[#1A1A1A] font-black' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]'
           }`}
         >
-          <Sliders className="h-4.5 w-4.5" />
+          <Sliders className="h-5 w-5" />
           <span className="font-sans text-[9.5px] mt-1 font-bold uppercase tracking-wider">Parameters</span>
         </button>
       </footer>
