@@ -247,19 +247,13 @@ export default function App() {
     const selectedCategory = categoriesList[Math.floor(Math.random() * categoriesList.length)];
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${profile.openaiApiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `You are an elite, focused GPT-4 educator creating bite-sized slides for LearnScroll.
+      const requestBody = {
+        model: 'gpt-5.5-free',
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You are an elite, focused AI educator creating bite-sized slides for LearnScroll.
 Your output MUST be a valid JSON object matching this schema:
 {
   "title": "A catchy, intriguing, short title (2-6 words)",
@@ -274,17 +268,44 @@ Your output MUST be a valid JSON object matching this schema:
   "backgroundColor": "A selected elegant dark background hex code (comfortable dark reading, e.g. #0F172A, #111827, #064E3B, #1B365D, #2D0B3D, #2E1A47, #371D1D)",
   "channelName": "A clever 1-word or 2-word themed creator handle, e.g. 'BioSphere', 'HistoLab', 'EcoStudy', 'BrainSync'"
 }`,
-            },
-            {
-              role: 'user',
-              content: `Generate a brand new, highly educational bite-sized card on the following category: "${selectedCategory}". Enforce strict intellectual value. Exclude gaming, memes, celebrity gossip, and hollow entertainment elements.`,
-            },
-          ],
-        }),
+          },
+          {
+            role: 'user',
+            content: `Generate a brand new, highly educational bite-sized card on the following category: "${selectedCategory}". Return the answer as a valid JSON object only. Enforce strict intellectual value. Exclude gaming, memes, celebrity gossip, and hollow entertainment elements.`,
+          },
+        ],
+      };
+
+      console.info('[LearnScroll generate] Sending generation request', {
+        endpoint: 'https://vsllm.com/v1/chat/completions',
+        model: requestBody.model,
+        responseFormat: requestBody.response_format,
+        selectedCategory,
+        userMessageContainsJson: requestBody.messages.some(
+          (message) => message.role === 'user' && /json/i.test(message.content)
+        ),
+        systemMessageContainsJson: requestBody.messages.some(
+          (message) => message.role === 'system' && /json/i.test(message.content)
+        ),
+        apiKeySuffix: profile.openaiApiKey.slice(-4),
+      });
+
+      const response = await fetch('https://vsllm.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${profile.openaiApiKey}`,
+        },
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => null);
+        console.error('[LearnScroll generate] Provider rejected generation request', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+        });
         throw new Error(errorData?.error?.message || 'Failed connecting to OpenAI API');
       }
 
@@ -402,7 +423,7 @@ Your output MUST be a valid JSON object matching this schema:
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
             </span>
             <span className="font-sans text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider">
-              GPT-4 Live
+              GPT-5.5 Free
             </span>
           </button>
         ) : (
@@ -486,7 +507,7 @@ Your output MUST be a valid JSON object matching this schema:
                     </h3>
                     <p className="font-sans text-xs text-[#1A1A1A]/60 leading-relaxed max-w-[280px] mx-auto mt-2">
                       {profile.openaiApiKey
-                        ? 'Generate fully unique, fresh custom lessons using GPT-4o Mini below!'
+                        ? 'Generate fully unique, fresh custom lessons using GPT-5.5 Free below!'
                         : 'Unlock endless personalized summaries, world news facts, or study hacks by saving an OpenAI Key in parameters!'}
                     </p>
 
@@ -598,7 +619,7 @@ Your output MUST be a valid JSON object matching this schema:
               </span>
             </div>
             <span className="font-mono text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 animate-pulse">
-              gpt-4o-mini
+              gpt-5.5-free
             </span>
           </div>
         )}

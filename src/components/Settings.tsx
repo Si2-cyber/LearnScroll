@@ -155,22 +155,22 @@ export default function Settings({
             <div className="flex items-center space-x-2.5">
               <Key className="h-5 w-5 text-[#1A1A1A]/70" />
               <h2 className="font-sans text-[13px] font-bold tracking-tight text-[#1A1A1A]">
-                OpenAI API Key (BYOK)
+                OpenRouter API Key (BYOK)
               </h2>
             </div>
             <span className="rounded-full bg-[#1A1A1A]/5 px-2 py-0.5 font-sans text-[9px] font-bold text-[#1A1A1A]/70 uppercase tracking-wider">
-              GPT-4o Mini
+              OpenRouter
             </span>
           </div>
 
           <p className="font-sans text-[11px] text-[#1A1A1A]/60 leading-relaxed pointer-events-none">
-            Custom real-time cards are generated via OpenAI using your key. It's stored entirely inside your local browser storage and never touches external databases or servers.
+            Custom real-time cards are generated via OpenRouter using your key. It's stored entirely inside your local browser storage and never touches external databases or servers.
           </p>
 
           <div className="rounded-lg bg-[#F4F1EA]/80 border border-[#1A1A1A]/10 p-3.5 flex items-start space-x-3 pointer-events-none">
             <Info className="h-4 w-4 text-[#1A1A1A]/70 shrink-0 mt-0.5" />
             <p className="font-sans text-[10px] text-[#1A1A1A]/75 leading-relaxed">
-              <strong>Need a key?</strong> Access platform features offline with pre-seeded slides. Create an account at platform.openai.com to generate your API keys.
+              <strong>Need a key?</strong> Access platform features offline with pre-seeded slides. Create an account at openrouter.ai/keys to generate your API keys.
             </p>
           </div>
 
@@ -218,7 +218,7 @@ export default function Settings({
                   <input
                     id="api-key-input-field"
                     type="password"
-                    placeholder="Paste OpenAI Key (sk-...)"
+                    placeholder="Paste OpenRouter Key (sk-or-...)"
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     className="flex-1 rounded-lg border border-[#1A1A1A]/10 bg-white px-3 py-2 font-mono text-xs text-[#1A1A1A] placeholder-gray-400 outline-none transition-all focus:border-[#1A1A1A]/30"
