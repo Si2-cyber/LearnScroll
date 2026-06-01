@@ -200,6 +200,8 @@ export default function Settings({
                 <button
                   id="clear-api-key-button"
                   onClick={handleClearApiKey}
+                  title="Remove API key"
+                  aria-label="Remove API key"
                   className="rounded-md bg-red-500/10 px-2.5 py-1.5 font-sans text-[10px] font-bold text-red-700 hover:bg-red-500/20 transition-colors"
                 >
                   Remove Key
@@ -227,6 +229,8 @@ export default function Settings({
                     id="save-api-key-button"
                     type="submit"
                     disabled={!apiKeyInput.trim()}
+                    title="Save API key"
+                    aria-label="Save API key"
                     className="rounded-lg bg-[#1A1A1A] px-4 py-2 font-sans text-xs font-bold uppercase tracking-wider text-white transition-all hover:bg-[#1A1A1A]/90 active:scale-95 disabled:opacity-45 disabled:hover:bg-[#1A1A1A] cursor-pointer"
                   >
                     Save
@@ -237,6 +241,8 @@ export default function Settings({
                     id="cancel-key-editing"
                     type="button"
                     onClick={() => setIsApiKeyEditing(false)}
+                    title="Use current API key"
+                    aria-label="Use current API key"
                     className="font-sans text-[10px] tracking-wide text-gray-500 underline decoration-gray-400 h-6 block"
                   >
                     Use current key
@@ -282,6 +288,8 @@ export default function Settings({
                 <button
                   key={topic.name}
                   onClick={() => toggleInterest(topic.name)}
+                  title={isActive ? `Remove ${topic.name}` : `Add ${topic.name}`}
+                  aria-label={isActive ? `Remove ${topic.name}` : `Add ${topic.name}`}
                   className={`flex items-center space-x-2 rounded-lg border px-3 py-2.5 transition-all outline-none duration-200 ${
                     isActive
                       ? 'border-[#1A1A1A] bg-[#1A1A1A]/5 shadow-sm'
@@ -313,6 +321,8 @@ export default function Settings({
             <button
               id="confirm-reset-trigger"
               onClick={() => setShowConfirmReset(true)}
+              title="Reset application state"
+              aria-label="Reset application state"
               className="flex w-full items-center justify-center space-x-2 rounded-lg border border-red-200 bg-white py-3 hover:bg-red-50 text-red-700 transition-colors cursor-pointer"
             >
               <Trash2 className="h-4 w-4 text-red-700" />
@@ -332,6 +342,8 @@ export default function Settings({
                     onResetData();
                     setShowConfirmReset(false);
                   }}
+                  title="Wipe all application data"
+                  aria-label="Wipe all application data"
                   className="flex-1 rounded-lg bg-red-700 hover:bg-red-800 py-3 font-sans text-xs font-bold text-white transition-colors cursor-pointer"
                 >
                   Yes, Wipe Everything
@@ -339,6 +351,8 @@ export default function Settings({
                 <button
                   id="cancel-system-reset"
                   onClick={() => setShowConfirmReset(false)}
+                  title="Cancel reset"
+                  aria-label="Cancel reset"
                   className="flex-1 rounded-lg border border-[#1A1A1A]/10 bg-white hover:bg-[#F4F1EA] py-3 font-sans text-xs font-bold text-[#1A1A1A]/70 transition-colors cursor-pointer"
                 >
                   Cancel

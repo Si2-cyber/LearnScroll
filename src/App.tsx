@@ -14,7 +14,7 @@ import {
   AlertCircle,
   HelpCircle,
 } from 'lucide-react';
-import { Card, Comment, UserProfile, Category } from './types';
+import { Card, Comment, UserProfile, Category, BookmarkMetadata } from './types';
 import { DEFAULT_CARDS } from './data/defaultCards';
 import Onboarding from './components/Onboarding';
 import ContentCard from './components/ContentCard';
@@ -74,6 +74,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [bookmarkMetadata, setBookmarkMetadata] = useState<Record<string, BookmarkMetadata>>(() => {
+    const saved = localStorage.getItem('learnscroll_bookmark_metadata');
+    return saved ? JSON.parse(saved) : {};
+  });
+
   // Navigation tab state: 'explore' | 'bookmarks' | 'settings'
   const [activeTab, setActiveTab] = useState<'explore' | 'bookmarks' | 'settings'>('explore');
 
@@ -87,9 +92,11 @@ export default function App() {
   // OpenAI Generation States
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   // Scroll Sync Refs
   const feedScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollTopRef = useRef<number>(0);
 
   // --- 2. EFFECT HOOKS FOR LOCALSTORAGE LOGS ---
   useEffect(() => {
@@ -116,6 +123,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('learnscroll_completed_reads', JSON.stringify(completedCardIds));
   }, [completedCardIds]);
+
+  useEffect(() => {
+    localStorage.setItem('learnscroll_bookmark_metadata', JSON.stringify(bookmarkMetadata));
+  }, [bookmarkMetadata]);
 
   // --- 3. ONBOARDING COMPLETION TRIGGER ---
   const handleOnboardingComplete = (selectedInterests: Category[]) => {
@@ -151,9 +162,22 @@ export default function App() {
   };
 
   const handleBookmarkCard = (cardId: string) => {
-    setBookmarkedCardIds((prev) =>
-      prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]
-    );
+    setBookmarkedCardIds((prev) => {
+      const isBookmarked = prev.includes(cardId);
+      if (isBookmarked) {
+        setBookmarkMetadata((metadata) => {
+          const { [cardId]: _removed, ...rest } = metadata;
+          return rest;
+        });
+        return prev.filter((id) => id !== cardId);
+      }
+
+      setBookmarkMetadata((metadata) => ({
+        ...metadata,
+        [cardId]: metadata[cardId] || { addedAt: Date.now() },
+      }));
+      return [...prev, cardId];
+    });
   };
 
   const handleSubscribeChannel = (channelName: string) => {
@@ -194,6 +218,13 @@ export default function App() {
 
   // --- 6. INTUITIVE NAVIGATION SWITCH FROM BOOKMARKS ---
   const handleViewInFeed = (cardId: string) => {
+    setBookmarkMetadata((metadata) => ({
+      ...metadata,
+      [cardId]: {
+        addedAt: metadata[cardId]?.addedAt || Date.now(),
+        lastSeenAt: Date.now(),
+      },
+    }));
     setActiveTab('explore');
     // Find index of this card in our filtered explore list
     const cardIdx = filteredFeedCards.findIndex((c) => c.id === cardId);
@@ -271,7 +302,7 @@ Your output MUST be a valid JSON object matching this schema:
           },
           {
             role: 'user',
-            content: `Generate a brand new, highly educational bite-sized card on the following category: "${selectedCategory}". Return the answer as a valid JSON object only. Enforce strict intellectual value. Exclude gaming, memes, celebrity gossip, and hollow entertainment elements.`,
+            content: `Generate a brand new, highly educational bite-sized card on the following category: "${selectedCategory}". Return the answer as a valid JSON object only. Enforce strict intellectual value. Exclude gaming, memes, celebrity gossip, and hollow entertainment elements. Do NOT include the word 'takeaway' or any label like 'Takeaway:' in the paragraphs or body text. The takeaway field is separate and will be displayed in its own UI element. End the last paragraph naturally without any summary label or transition word.`,
           },
         ],
       };
@@ -330,13 +361,26 @@ Your output MUST be a valid JSON object matching this schema:
         commentsCount: 0,
       };
 
-      // Add to cards. Place at the end of pre-seeded cards so it appends nicely.
-      setCards((prevCards) => [...prevCards, generatedCard]);
+      const nextCards = [...cards, generatedCard];
+      const nextFilteredCards = nextCards.filter((card) => {
+        if (profile.interests.length === 0) return true;
+        return profile.interests.includes(card.category);
+      });
+      const generatedIndex = nextFilteredCards.findIndex((card) => card.id === generatedCard.id);
 
-      // Scroll smoothly after React renders the new card without using stale filtered feed state.
+      // Add to cards and snap directly to the newly generated lesson, not the end slide.
+      setCards(nextCards);
+      if (generatedIndex !== -1) {
+        setActiveIndex(generatedIndex);
+      }
+
       setTimeout(() => {
-        if (feedScrollRef.current) {
-          feedScrollRef.current.scrollTop = feedScrollRef.current.scrollHeight;
+        if (feedScrollRef.current && generatedIndex !== -1) {
+          const clientHeight = feedScrollRef.current.clientHeight;
+          feedScrollRef.current.scrollTo({
+            top: generatedIndex * clientHeight,
+            behavior: 'smooth',
+          });
         }
       }, 150);
     } catch (e: any) {
@@ -367,6 +411,7 @@ Your output MUST be a valid JSON object matching this schema:
     localStorage.removeItem('learnscroll_likes');
     localStorage.removeItem('learnscroll_bookmarks');
     localStorage.removeItem('learnscroll_completed_reads');
+    localStorage.removeItem('learnscroll_bookmark_metadata');
 
     setProfile({
       username: 'scholar_learner',
@@ -380,6 +425,7 @@ Your output MUST be a valid JSON object matching this schema:
     setLikedCardIds([]);
     setBookmarkedCardIds([]);
     setCompletedCardIds([]);
+    setBookmarkMetadata({});
     setActiveIndex(0);
     setActiveTab('explore');
   };
@@ -401,7 +447,9 @@ Your output MUST be a valid JSON object matching this schema:
     <div className="flex h-screen w-full flex-col justify-between bg-[#F4F1EA] text-[#1A1A1A] antialiased overflow-hidden select-none">
       
       {/* APP HEADER */}
-      <header className="flex h-16 w-full items-center justify-between border-b border-[#1A1A1A]/10 bg-[#F4F1EA]/95 px-5 md:px-8 shrink-0 z-30">
+      <header className={`flex h-16 w-full items-center justify-between border-b border-[#1A1A1A]/10 bg-[#F4F1EA]/95 px-5 md:px-8 shrink-0 z-30 transition-all duration-300 ${
+        expandedCardId ? 'pointer-events-none h-0 opacity-0 overflow-hidden border-0' : ''
+      }`}>
         <div className="flex items-center space-x-2 pointer-events-none">
           <span className="text-[#1A1A1A] font-display font-light text-2xl tracking-tight">
             LearnScroll
@@ -416,6 +464,8 @@ Your output MUST be a valid JSON object matching this schema:
           <button
             id="status-badge-loaded"
             onClick={() => setActiveTab('settings')}
+            title="Open settings"
+            aria-label="Open settings"
             className="flex items-center space-x-1.5 rounded-full bg-emerald-500/5 border border-emerald-500/30 px-3 py-1.5 hover:bg-emerald-500/10 transition-colors duration-200"
           >
             <span className="relative flex h-2 w-2">
@@ -430,6 +480,8 @@ Your output MUST be a valid JSON object matching this schema:
           <button
             id="status-badge-offline"
             onClick={() => setActiveTab('settings')}
+            title="Open settings"
+            aria-label="Open settings"
             className="flex items-center space-x-1.5 rounded-full bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 px-3 py-1.5 hover:bg-[#1A1A1A]/10 transition-colors duration-200"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-[#1A1A1A]/60" />
@@ -463,6 +515,8 @@ Your output MUST be a valid JSON object matching this schema:
                   <button
                     id="fallback-settings-nav"
                     onClick={() => setActiveTab('settings')}
+                    title="Adjust topics"
+                    aria-label="Adjust topics"
                     className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 font-sans text-xs font-bold text-white"
                   >
                     Adjust Topics
@@ -494,6 +548,21 @@ Your output MUST be a valid JSON object matching this schema:
                       onBookmark={() => handleBookmarkCard(card.id)}
                       onSubscribe={() => handleSubscribeChannel(card.channelName)}
                       onCommentClick={() => handleOpenComments(card.id)}
+                      onExpandedChange={(isExpanded) => {
+                        if (isExpanded) {
+                          // Save scroll position before expanding
+                          savedScrollTopRef.current = feedScrollRef.current?.scrollTop ?? 0;
+                          setExpandedCardId(card.id);
+                        } else {
+                          setExpandedCardId(null);
+                          // Restore scroll position after collapse, on next frame
+                          requestAnimationFrame(() => {
+                            if (feedScrollRef.current) {
+                              feedScrollRef.current.scrollTop = savedScrollTopRef.current;
+                            }
+                          });
+                        }
+                      }}
                     />
                   ))}
 
@@ -517,6 +586,8 @@ Your output MUST be a valid JSON object matching this schema:
                           id="end-slide-generate"
                           disabled={isGenerating}
                           onClick={handleGenerateLiveCard}
+                          title={isGenerating ? 'Synthesizing new slide' : 'Generate new slide'}
+                          aria-label={isGenerating ? 'Synthesizing new slide' : 'Generate new slide'}
                           className="flex p-3 w-full items-center justify-center space-x-2 rounded-lg bg-[#1A1A1A] text-white font-sans text-xs font-bold uppercase tracking-wider hover:bg-[#1A1A1A]/90 disabled:opacity-45 transition-all text-center shrink-0 cursor-pointer shadow-sm"
                         >
                           {isGenerating ? (
@@ -535,6 +606,8 @@ Your output MUST be a valid JSON object matching this schema:
                         <button
                           id="end-slide-setup-key"
                           onClick={() => setActiveTab('settings')}
+                          title="Install OpenAI API key"
+                          aria-label="Install OpenAI API key"
                           className="flex w-full items-center justify-center space-x-2 rounded-lg border border-[#1A1A1A]/15 bg-[#1A1A1A]/5 px-4 py-3 font-sans text-xs font-bold text-[#1A1A1A] hover:bg-[#1A1A1A]/10 transition-all text-center cursor-pointer"
                         >
                           <span>Install OpenAI API Key</span>
@@ -564,6 +637,7 @@ Your output MUST be a valid JSON object matching this schema:
             >
               <BookmarkView
                 bookmarkedCards={cards.filter((c) => bookmarkedCardIds.includes(c.id))}
+                bookmarkMetadata={bookmarkMetadata}
                 onRemoveBookmark={handleBookmarkCard}
                 onViewInFeed={handleViewInFeed}
               />
@@ -592,25 +666,8 @@ Your output MUST be a valid JSON object matching this schema:
 
         </AnimatePresence>
 
-        {/* FLOATING QUICK GENERATE BUTTON FOR LOGGED IN USERS */}
-        {activeTab === 'explore' && profile.openaiApiKey && !isGenerating && (
-          <motion.button
-            id="floating-gen-fab"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            onClick={handleGenerateLiveCard}
-            className="absolute bottom-4 right-4 z-20 flex h-10 items-center space-x-1.5 rounded-lg bg-[#1A1A1A] border border-[#1A1A1A]/20 px-3 text-white shadow-lg cursor-pointer hover:bg-[#1A1A1A]/90 transition-all"
-            title="Generate Live GPT Card"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-white" />
-            <span className="font-sans text-[11px] font-bold tracking-tight">
-              Gen Slide
-            </span>
-          </motion.button>
-        )}
-
         {/* FLOATING GENERATING LOADER */}
-        {isGenerating && (
+        {isGenerating && !expandedCardId && (
           <div className="absolute inset-x-4 bottom-4 z-20 rounded-lg bg-white border border-[#1A1A1A]/15 px-4 py-3 text-[#1A1A1A] flex items-center justify-between shadow-lg backdrop-blur-sm">
             <div className="flex items-center space-x-2.5">
               <Loader2 className="h-4 w-4 text-[#1A1A1A] animate-spin" />
@@ -626,7 +683,9 @@ Your output MUST be a valid JSON object matching this schema:
       </main>
 
       {/* GLOBAL FOOTER: GLASSMORPHISM TABS BAR */}
-      <footer className="h-16 w-full border-t border-[#1A1A1A]/10 bg-[#FFFFFF] px-4 flex items-center justify-around shrink-0 z-30 mx-auto max-w-[440px] border-x">
+      <footer className={`h-16 w-full border-t border-[#1A1A1A]/10 bg-[#FFFFFF] px-4 flex items-center justify-around shrink-0 z-30 mx-auto max-w-[440px] border-x transition-all duration-300 ${
+        expandedCardId ? 'pointer-events-none h-0 opacity-0 overflow-hidden border-0' : ''
+      }`}>
         
         {/* Explore Card tab */}
         <button
@@ -641,6 +700,8 @@ Your output MUST be a valid JSON object matching this schema:
               }
             }, 60);
           }}
+          title="Explore"
+          aria-label="Explore"
           className={`flex flex-col items-center justify-center w-20 py-1 transition-colors outline-none cursor-pointer ${
             activeTab === 'explore' ? 'text-[#1A1A1A] font-black' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]'
           }`}
@@ -653,6 +714,8 @@ Your output MUST be a valid JSON object matching this schema:
         <button
           id="nav-bookmarks"
           onClick={() => setActiveTab('bookmarks')}
+          title="Syllabus"
+          aria-label="Syllabus"
           className={`flex flex-col items-center justify-center w-20 py-1 transition-colors outline-none cursor-pointer ${
             activeTab === 'bookmarks' ? 'text-[#1A1A1A] font-black' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]'
           }`}
@@ -665,6 +728,8 @@ Your output MUST be a valid JSON object matching this schema:
         <button
           id="nav-settings"
           onClick={() => setActiveTab('settings')}
+          title="Parameters"
+          aria-label="Parameters"
           className={`flex flex-col items-center justify-center w-20 py-1 transition-colors outline-none cursor-pointer ${
             activeTab === 'settings' ? 'text-[#1A1A1A] font-black' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]'
           }`}

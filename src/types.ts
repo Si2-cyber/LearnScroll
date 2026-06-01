@@ -15,6 +15,11 @@ export type Category =
   | 'Language learning snippets'
   | 'Life skills & how-to tips';
 
+export interface BookmarkMetadata {
+  addedAt: number;
+  lastSeenAt?: number;
+}
+
 export interface Card {
   id: string;
   title: string;

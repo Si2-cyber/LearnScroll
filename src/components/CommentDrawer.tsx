@@ -68,6 +68,8 @@ export default function CommentDrawer({
               <button
                 id="close-comment"
                 onClick={onClose}
+                title="Close comments"
+                aria-label="Close comments"
                 className="rounded-full p-1.5 transition-colors duration-200 hover:bg-[#1A1A1A]/5"
               >
                 <X className="h-4.5 w-4.5 text-[#1A1A1A]/60" />
@@ -131,6 +133,8 @@ export default function CommentDrawer({
                   id="submit-comment-button"
                   type="submit"
                   disabled={!commentText.trim()}
+                  title="Send comment"
+                  aria-label="Send comment"
                   className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1A1A1A] text-white transition-all duration-200 hover:bg-[#1A1A1A]/90 disabled:opacity-40"
                 >
                   <Send className="h-3.5 w-3.5" />

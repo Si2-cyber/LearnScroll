@@ -3,27 +3,65 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bookmark, Star, Trash2, ArrowUpDown, CornerDownRight, ExternalLink } from 'lucide-react';
-import { Card } from '../types';
+import { Bookmark, Trash2, ArrowUpDown, CornerDownRight, ExternalLink } from 'lucide-react';
+import { BookmarkMetadata, Card } from '../types';
+
+type BookmarkSortMethod = 'category' | 'date-added-asc' | 'date-added-desc' | 'last-seen';
+
+const SORT_OPTIONS: { value: BookmarkSortMethod; label: string }[] = [
+  { value: 'category', label: 'Category' },
+  { value: 'date-added-desc', label: 'Date added: newest' },
+  { value: 'date-added-asc', label: 'Date added: oldest' },
+  { value: 'last-seen', label: 'Last seen' },
+];
 
 interface BookmarkViewProps {
   bookmarkedCards: Card[];
+  bookmarkMetadata: Record<string, BookmarkMetadata>;
   onRemoveBookmark: (cardId: string) => void;
   onViewInFeed: (cardId: string) => void;
 }
 
 export default function BookmarkView({
   bookmarkedCards,
+  bookmarkMetadata,
   onRemoveBookmark,
   onViewInFeed,
 }: BookmarkViewProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sortMethod, setSortMethod] = useState<BookmarkSortMethod>('date-added-desc');
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
+
+  const sortedBookmarkedCards = useMemo(() => {
+    return [...bookmarkedCards].sort((a, b) => {
+      const aMetadata = bookmarkMetadata[a.id];
+      const bMetadata = bookmarkMetadata[b.id];
+      const aAddedAt = aMetadata?.addedAt || 0;
+      const bAddedAt = bMetadata?.addedAt || 0;
+      const aLastSeenAt = aMetadata?.lastSeenAt || 0;
+      const bLastSeenAt = bMetadata?.lastSeenAt || 0;
+
+      switch (sortMethod) {
+        case 'category': {
+          const categoryCompare = a.category.localeCompare(b.category);
+          if (categoryCompare !== 0) return categoryCompare;
+          return a.title.localeCompare(b.title);
+        }
+        case 'date-added-asc':
+          return aAddedAt - bAddedAt;
+        case 'last-seen':
+          return bLastSeenAt - aLastSeenAt || bAddedAt - aAddedAt;
+        case 'date-added-desc':
+        default:
+          return bAddedAt - aAddedAt;
+      }
+    });
+  }, [bookmarkMetadata, bookmarkedCards, sortMethod]);
 
   return (
     <div className="min-h-screen w-full bg-[#F4F1EA] text-[#1A1A1A] px-5 pb-24 pt-6 md:px-8">
@@ -57,17 +95,39 @@ export default function BookmarkView({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between pointer-events-none pb-1">
-              <span className="font-mono text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/50">
-                {bookmarkedCards.length} saved item{bookmarkedCards.length !== 1 ? 's' : ''}
-              </span>
-              <span className="font-sans text-[10px] text-[#1A1A1A]/50 flex items-center gap-1 font-semibold uppercase tracking-wider">
-                <ArrowUpDown className="h-3 w-3" /> Tap to read details
-              </span>
+            <div className="space-y-2 pb-1">
+              <div className="flex items-center justify-between pointer-events-none">
+                <span className="font-mono text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/50">
+                  {bookmarkedCards.length} saved item{bookmarkedCards.length !== 1 ? 's' : ''}
+                </span>
+                <span className="font-sans text-[10px] text-[#1A1A1A]/50 flex items-center gap-1 font-semibold uppercase tracking-wider">
+                  <ArrowUpDown className="h-3 w-3" /> Tap to read details
+                </span>
+              </div>
+
+              <label className="flex items-center justify-between rounded-lg border border-[#1A1A1A]/10 bg-white px-3 py-2 shadow-sm">
+                <span className="font-sans text-[9px] font-black uppercase tracking-wider text-[#1A1A1A]/50">
+                  Sort by
+                </span>
+                <select
+                  id="bookmark-sort-method"
+                  value={sortMethod}
+                  onChange={(e) => setSortMethod(e.target.value as BookmarkSortMethod)}
+                  title="Sort syllabus collection"
+                  aria-label="Sort syllabus collection"
+                  className="max-w-[190px] rounded-md border border-[#1A1A1A]/10 bg-[#F4F1EA]/80 px-2 py-1 font-sans text-[10px] font-bold text-[#1A1A1A] outline-none transition-colors focus:border-[#1A1A1A]/30"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             <div className="space-y-3">
-              {bookmarkedCards.map((card) => {
+              {sortedBookmarkedCards.map((card) => {
                 const isExpanded = expandedId === card.id;
 
                 return (
@@ -115,7 +175,8 @@ export default function BookmarkView({
                             onViewInFeed(card.id);
                           }}
                           className="rounded-md p-1.5 text-[#1A1A1A]/50 hover:bg-[#1A1A1A]/5 hover:text-[#1A1A1A] transition-colors"
-                          title="View Fullscreen"
+                          title="View fullscreen"
+                          aria-label={`View ${card.title} fullscreen`}
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
@@ -126,7 +187,8 @@ export default function BookmarkView({
                             onRemoveBookmark(card.id);
                           }}
                           className="rounded-md p-1.5 text-red-650 hover:bg-red-50 hover:text-red-700 transition-colors"
-                          title="Discard star"
+                          title="Remove bookmark"
+                          aria-label={`Remove ${card.title} from bookmarks`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

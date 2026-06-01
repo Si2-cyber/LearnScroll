@@ -144,6 +144,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.04 }}
                 onClick={() => toggleTopic(topic.name)}
+                title={isSelected ? `Remove ${topic.name}` : `Add ${topic.name}`}
+                aria-label={isSelected ? `Remove ${topic.name}` : `Add ${topic.name}`}
                 className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 transition-all duration-300 outline-none text-left ${
                   isSelected
                     ? 'border-[#1A1A1A] bg-[#1A1A1A]/5 shadow-sm'
@@ -191,6 +193,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           id="oncoding-continue-button"
           disabled={selected.length === 0}
           onClick={handleNext}
+          title={selected.length === 0 ? 'Select at least one topic' : `Start learning with ${selected.length} selected topic${selected.length !== 1 ? 's' : ''}`}
+          aria-label={selected.length === 0 ? 'Select at least one topic' : `Start learning with ${selected.length} selected topic${selected.length !== 1 ? 's' : ''}`}
           className={`flex w-full items-center justify-center rounded-xl py-3.5 font-sans text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
             selected.length > 0
               ? 'bg-[#1A1A1A] text-[#F4F1EA] shadow-md hover:bg-[#1A1A1A]/90 active:scale-98 cursor-pointer'
