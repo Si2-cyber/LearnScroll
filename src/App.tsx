@@ -13,9 +13,16 @@ import {
   Loader2,
   AlertCircle,
   HelpCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { Card, Comment, UserProfile, Category, BookmarkMetadata } from './types';
 import { DEFAULT_CARDS } from './data/defaultCards';
+import {
+  isSupabaseConfigured,
+  mapSupabaseCardRowToCard,
+  supabase,
+  SupabaseCardRow,
+} from './lib/supabase';
 import Onboarding from './components/Onboarding';
 import ContentCard from './components/ContentCard';
 import BookmarkView from './components/BookmarkView';
@@ -93,6 +100,14 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [syllabusFullscreenCardId, setSyllabusFullscreenCardId] = useState<string | null>(null);
+
+  // Supabase sync state. Anonymous auth is used so each browser session has a stable auth.uid().
+  const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
+  const [isCardLoading, setIsCardLoading] = useState(isSupabaseConfigured);
+  const [cardLoadError, setCardLoadError] = useState<string | null>(null);
+  const [likeActionError, setLikeActionError] = useState<string | null>(null);
+  const [likeInFlightCardIds, setLikeInFlightCardIds] = useState<string[]>([]);
 
   // Scroll Sync Refs
   const feedScrollRef = useRef<HTMLDivElement>(null);
@@ -128,6 +143,105 @@ export default function App() {
     localStorage.setItem('learnscroll_bookmark_metadata', JSON.stringify(bookmarkMetadata));
   }, [bookmarkMetadata]);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    const supabaseClient = supabase;
+    let isCancelled = false;
+
+    const loadSupabaseCards = async () => {
+      setIsCardLoading(true);
+      setCardLoadError(null);
+
+      try {
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        let user = sessionData.session?.user ?? null;
+        if (!user) {
+          const { data: authData, error: authError } = await supabaseClient.auth.signInAnonymously();
+          if (authError) throw authError;
+          user = authData.user;
+        }
+
+        if (!user) {
+          throw new Error('Supabase anonymous auth did not return a user.');
+        }
+
+        const [{ data: cardRows, error: cardsError }, { data: likeRows, error: likesError }] = await Promise.all([
+          supabaseClient.from('cards').select('*').order('created_at', { ascending: true }),
+          supabaseClient.from('card_likes').select('card_id').eq('user_id', user.id),
+        ]);
+
+        if (cardsError) throw cardsError;
+        if (likesError) throw likesError;
+        if (isCancelled) return;
+
+        const localCustomCards = (() => {
+          const saved = localStorage.getItem('learnscroll_custom_cards');
+          if (!saved) return [] as Card[];
+          try {
+            const parsed = JSON.parse(saved);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            return [] as Card[];
+          }
+        })();
+
+        const serverCards = (cardRows || []).map(mapSupabaseCardRowToCard);
+        setCards(serverCards.length > 0 ? [...serverCards, ...localCustomCards] : DEFAULT_CARDS);
+        setLikedCardIds(((likeRows || []) as { card_id: string }[]).map((row) => row.card_id));
+        setSupabaseUserId(user.id);
+      } catch (e: any) {
+        console.error('[LearnScroll Supabase] Falling back to local cards', e);
+        if (!isCancelled) {
+          setCardLoadError(e?.message || 'Could not load shared cards. Using local defaults.');
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsCardLoading(false);
+        }
+      }
+    };
+
+    loadSupabaseCards();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    const supabaseClient = supabase;
+    const channel = supabaseClient
+      .channel('learnscroll-cards')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'cards' },
+        (payload) => {
+          const updatedRow = payload.new as SupabaseCardRow;
+          setCards((prevCards) =>
+            prevCards.map((card) =>
+              card.id === updatedRow.id
+                ? {
+                    ...card,
+                    likesCount: updatedRow.likes_count ?? card.likesCount,
+                    commentsCount: updatedRow.comments_count ?? card.commentsCount,
+                  }
+                : card
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, []);
+
   // --- 3. ONBOARDING COMPLETION TRIGGER ---
   const handleOnboardingComplete = (selectedInterests: Category[]) => {
     setProfile((prev) => ({
@@ -155,10 +269,59 @@ export default function App() {
   }, [activeIndex, filteredFeedCards]);
 
   // --- 5. INTERACTING HANDLERS ---
-  const handleLikeCard = (cardId: string) => {
-    setLikedCardIds((prev) =>
-      prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]
+  const handleLikeCard = async (cardId: string) => {
+    if (!isSupabaseConfigured || !supabase || !supabaseUserId) {
+      setLikedCardIds((prev) =>
+        prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]
+      );
+      return;
+    }
+
+    if (likeInFlightCardIds.includes(cardId)) return;
+
+    const wasLiked = likedCardIds.includes(cardId);
+    const shouldLike = !wasLiked;
+
+    setLikeActionError(null);
+    setLikeInFlightCardIds((prev) => [...prev, cardId]);
+    setLikedCardIds((prev) => (shouldLike ? [...prev, cardId] : prev.filter((id) => id !== cardId)));
+    setCards((prevCards) =>
+      prevCards.map((card) =>
+        card.id === cardId
+          ? { ...card, likesCount: Math.max(0, card.likesCount + (shouldLike ? 1 : -1)) }
+          : card
+      )
     );
+
+    try {
+      const { data: nextLikesCount, error } = await (supabase.rpc as any)('toggle_card_like', {
+        p_card_id: cardId,
+        p_liked: shouldLike,
+      });
+
+      if (error) throw error;
+
+      if (typeof nextLikesCount === 'number') {
+        setCards((prevCards) =>
+          prevCards.map((card) =>
+            card.id === cardId ? { ...card, likesCount: nextLikesCount } : card
+          )
+        );
+      }
+    } catch (e: any) {
+      console.error('[LearnScroll Supabase] Like action failed', e);
+      setLikedCardIds((prev) => (wasLiked ? [...prev, cardId] : prev.filter((id) => id !== cardId)));
+      setCards((prevCards) =>
+        prevCards.map((card) =>
+          card.id === cardId
+            ? { ...card, likesCount: Math.max(0, card.likesCount + (shouldLike ? -1 : 1)) }
+            : card
+        )
+      );
+      setLikeActionError(e?.message || 'Could not sync that like. Please try again.');
+    } finally {
+      setLikeInFlightCardIds((prev) => prev.filter((id) => id !== cardId));
+    }
   };
 
   const handleBookmarkCard = (cardId: string) => {
@@ -216,7 +379,7 @@ export default function App() {
     );
   };
 
-  // --- 6. INTUITIVE NAVIGATION SWITCH FROM BOOKMARKS ---
+  // --- 6. SYLLABUS FULLSCREEN VIEWER ---
   const handleViewInFeed = (cardId: string) => {
     setBookmarkMetadata((metadata) => ({
       ...metadata,
@@ -225,44 +388,12 @@ export default function App() {
         lastSeenAt: Date.now(),
       },
     }));
-    setActiveTab('explore');
-    // Find index of this card in our filtered explore list
-    const cardIdx = filteredFeedCards.findIndex((c) => c.id === cardId);
-    if (cardIdx !== -1) {
-      setActiveIndex(cardIdx);
-      setTimeout(() => {
-        if (feedScrollRef.current) {
-          const clientHeight = feedScrollRef.current.clientHeight;
-          feedScrollRef.current.scrollTop = cardIdx * clientHeight;
-        }
-      }, 100);
-    } else {
-      // If card isn't in filtered list, we must temporarily add its category to active interests
-      const targetCard = cards.find((c) => c.id === cardId);
-      if (targetCard) {
-        setProfile((prev) => {
-          if (!prev.interests.includes(targetCard.category)) {
-            return { ...prev, interests: [...prev.interests, targetCard.category] };
-          }
-          return prev;
-        });
-        setTimeout(() => {
-          const freshFiltered = cards.filter((card) => {
-            if (profile.interests.length === 0) return true;
-            return [...profile.interests, targetCard.category].includes(card.category);
-          });
-          const freshIdx = freshFiltered.findIndex((c) => c.id === cardId);
-          if (freshIdx !== -1) {
-            setActiveIndex(freshIdx);
-            if (feedScrollRef.current) {
-              const clientHeight = feedScrollRef.current.clientHeight;
-              feedScrollRef.current.scrollTop = freshIdx * clientHeight;
-            }
-          }
-        }, 150);
-      }
-    }
+    setSyllabusFullscreenCardId(cardId);
   };
+
+  const syllabusFullscreenCard = syllabusFullscreenCardId
+    ? cards.find((card) => card.id === syllabusFullscreenCardId)
+    : null;
 
   // --- 7. OPENAI AI INTEGRATION / LIVE CARD GENERATOR ---
   const handleGenerateLiveCard = async () => {
@@ -448,7 +579,7 @@ Your output MUST be a valid JSON object matching this schema:
       
       {/* APP HEADER */}
       <header className={`flex h-16 w-full items-center justify-between border-b border-[#1A1A1A]/10 bg-[#F4F1EA]/95 px-5 md:px-8 shrink-0 z-30 transition-all duration-300 ${
-        expandedCardId ? 'pointer-events-none h-0 opacity-0 overflow-hidden border-0' : ''
+        expandedCardId || syllabusFullscreenCardId ? 'pointer-events-none h-0 opacity-0 overflow-hidden border-0' : ''
       }`}>
         <div className="flex items-center space-x-2 pointer-events-none">
           <span className="text-[#1A1A1A] font-display font-light text-2xl tracking-tight">
@@ -666,8 +797,71 @@ Your output MUST be a valid JSON object matching this schema:
 
         </AnimatePresence>
 
+        {/* SYLLABUS FULLSCREEN VIEWER */}
+        <AnimatePresence>
+          {syllabusFullscreenCard && (
+            <motion.div
+              key={`syllabus-fullscreen-${syllabusFullscreenCard.id}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-50 flex flex-col bg-white mx-auto max-w-[440px] h-[100dvh]"
+            >
+              <motion.button
+                onClick={() => setSyllabusFullscreenCardId(null)}
+                title="Back"
+                aria-label="Back to syllabus"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-[#1A1A1A]/10 bg-white/90 shadow-sm backdrop-blur-md"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </motion.button>
+
+              <div
+                className="flex-1 overflow-y-auto px-6 pt-20 pb-40 text-left"
+                style={{ WebkitOverflowScrolling: 'touch' as any }}
+              >
+                <h2 className="font-display font-light text-4xl md:text-5xl text-[#1A1A1A] tracking-tight leading-tight mb-8 break-words">
+                  {syllabusFullscreenCard.title}
+                </h2>
+                <div className="space-y-5">
+                  {syllabusFullscreenCard.paragraphs.map((para, idx) => (
+                    <p key={idx} className="font-serif text-[17px] md:text-[19px] text-[#1A1A1A]/80 leading-relaxed">
+                      {para}
+                    </p>
+                  ))}
+                </div>
+              </div>
+
+              <div className="absolute bottom-0 inset-x-0 px-6 pb-6 pt-8 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
+                <div className="border-l-2 border-[#1A1A1A] pl-3 py-1.5 bg-[#F4F1EA]/80 backdrop-blur-sm rounded-r-lg shadow-sm opacity-70">
+                  <span className="block font-sans text-[9px] font-black tracking-wider text-[#1A1A1A]/50 uppercase mb-0.5">Takeaway</span>
+                  <p className="font-serif text-[12px] font-medium leading-snug text-[#1A1A1A]/90 italic pr-6">{syllabusFullscreenCard.takeaway}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* SUPABASE STATUS MESSAGES */}
+        {(isCardLoading || cardLoadError || likeActionError) && !expandedCardId && !syllabusFullscreenCardId && (
+          <div className={`absolute inset-x-4 top-4 z-20 rounded-lg border px-4 py-3 flex items-center gap-2 shadow-lg backdrop-blur-sm ${
+            isCardLoading
+              ? 'bg-white border-[#1A1A1A]/15 text-[#1A1A1A]'
+              : 'bg-red-50 border-red-500/20 text-red-800'
+          }`}>
+            {isCardLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertCircle className="h-4 w-4" />}
+            <span className="font-sans text-[11px] font-bold leading-snug">
+              {isCardLoading ? 'Loading shared curriculum...' : cardLoadError || likeActionError}
+            </span>
+          </div>
+        )}
+
         {/* FLOATING GENERATING LOADER */}
-        {isGenerating && !expandedCardId && (
+        {isGenerating && !expandedCardId && !syllabusFullscreenCardId && (
           <div className="absolute inset-x-4 bottom-4 z-20 rounded-lg bg-white border border-[#1A1A1A]/15 px-4 py-3 text-[#1A1A1A] flex items-center justify-between shadow-lg backdrop-blur-sm">
             <div className="flex items-center space-x-2.5">
               <Loader2 className="h-4 w-4 text-[#1A1A1A] animate-spin" />
@@ -684,7 +878,7 @@ Your output MUST be a valid JSON object matching this schema:
 
       {/* GLOBAL FOOTER: GLASSMORPHISM TABS BAR */}
       <footer className={`h-16 w-full border-t border-[#1A1A1A]/10 bg-[#FFFFFF] px-4 flex items-center justify-around shrink-0 z-30 mx-auto max-w-[440px] border-x transition-all duration-300 ${
-        expandedCardId ? 'pointer-events-none h-0 opacity-0 overflow-hidden border-0' : ''
+        expandedCardId || syllabusFullscreenCardId ? 'pointer-events-none h-0 opacity-0 overflow-hidden border-0' : ''
       }`}>
         
         {/* Explore Card tab */}

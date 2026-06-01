@@ -17,7 +17,8 @@ The app combines:
 - **A vertical snap-scroll feed** for quick discovery.
 - **Curated educational cards** across books, science, history, philosophy, language, focus, and life skills.
 - **A personal syllabus collection** for bookmarked lessons.
-- **Local-first persistence** for likes, comments, bookmarks, completed cards, selected topics, and API key settings.
+- **Local-first persistence** for comments, bookmarks, completed cards, selected topics, and API key settings.
+- **Optional Supabase-backed real-time likes** so shared like counts update across active clients.
 - **Optional AI generation** for creating fresh personalized lesson cards from the user’s selected interests.
 
 ---
@@ -73,11 +74,15 @@ Cards can be tapped to open a more spacious reading mode with the takeaway pinne
 
 Bookmarked cards appear in the Syllabus tab, where users can revisit saved lessons, expand summaries, remove bookmarks, or jump back to the original card in the feed.
 
-### 4. Reflect through comments
+### 4. Like cards in real time
 
-Each card has a discussion drawer where users can add local comments. This creates a lightweight reflection layer without requiring accounts or backend infrastructure.
+When Supabase is configured, card likes are stored in Supabase and shared like counts update in real time across active browser sessions. If Supabase environment variables are missing or the backend cannot be reached, likes fall back to the existing local browser behavior.
 
-### 5. Generate new lessons
+### 5. Reflect through comments
+
+Each card has a discussion drawer where users can add local comments. This creates a lightweight reflection layer without requiring accounts.
+
+### 6. Generate new lessons
 
 After saving an OpenRouter-compatible API key in Parameters, users can generate new custom learning cards. Generated cards are added to the local feed and persisted in browser storage.
 
@@ -92,9 +97,10 @@ After saving an OpenRouter-compatible API key in Parameters, users can generate 
 - **Like, bookmark, subscribe, share, and comment interactions.**
 - **Syllabus collection** for saved knowledge cards.
 - **Settings dashboard** with progress stats, active topic controls, API key management, and reset controls.
-- **Local persistence** using browser `localStorage`.
+- **Local persistence** using browser `localStorage` for profile, generated cards, comments, bookmarks, and progress.
+- **Supabase real-time likes** with anonymous auth, row-level security, and fallback to local likes when not configured.
 - **BYOK AI generation** through a chat-completions endpoint.
-- **No backend required** for the core experience.
+- **No backend required** for the fallback local experience.
 
 ---
 
@@ -106,7 +112,8 @@ After saving an OpenRouter-compatible API key in Parameters, users can generate 
 - **Tailwind CSS** for utility-first styling.
 - **Motion** for animations and transitions.
 - **Lucide React** for icons.
-- **Browser localStorage** for persistence.
+- **Supabase** for optional shared cards, anonymous identities, per-user likes, and real-time like count updates.
+- **Browser localStorage** for local profile, settings, generated cards, comments, bookmarks, progress, and fallback likes.
 
 ---
 
@@ -148,7 +155,11 @@ LearnScroll/
 │   ├── App.tsx
 │   ├── index.css
 │   ├── main.tsx
+│   ├── lib/
+│   │   └── supabase.ts
 │   └── types.ts
+├── supabase/
+│   └── schema.sql
 ├── index.html
 ├── package.json
 ├── tsconfig.json
@@ -157,14 +168,16 @@ LearnScroll/
 
 ### Key files
 
-- `src/App.tsx` owns app state, persistence, navigation, feed filtering, comments, bookmarks, and AI card generation.
+- `src/App.tsx` owns app state, persistence, navigation, feed filtering, Supabase card loading, real-time likes, comments, bookmarks, and AI card generation.
 - `src/components/Onboarding.tsx` lets users select interests before entering the main app.
 - `src/components/ContentCard.tsx` renders the full-screen feed cards and expanded reading overlay.
 - `src/components/BookmarkView.tsx` displays the saved syllabus collection.
 - `src/components/Settings.tsx` manages topic preferences, stats, API key storage, and reset actions.
 - `src/components/CommentDrawer.tsx` provides the slide-up discussion UI.
 - `src/data/defaultCards.ts` contains the pre-seeded educational curriculum.
+- `src/lib/supabase.ts` configures the optional Supabase browser client and maps database rows into app card objects.
 - `src/types.ts` defines the shared `Category`, `Card`, `Comment`, and `UserProfile` types.
+- `supabase/schema.sql` creates the Supabase tables, policies, like RPC, seed data, and real-time setup notes.
 
 ---
 
@@ -209,6 +222,27 @@ npm run lint
 
 ---
 
+## Supabase setup for real-time likes
+
+Supabase is optional. Without `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, the app continues to use bundled default cards and local liked-card IDs.
+
+To enable shared real-time likes:
+
+1. Create a Supabase project.
+2. Enable anonymous sign-ins in Supabase Auth so the browser can create a stable anonymous `auth.uid()` for each visitor.
+3. Run `supabase/schema.sql` in the Supabase SQL editor.
+4. Enable Realtime for the `public.cards` table in Database > Replication, or run the realtime publication statement noted at the bottom of `supabase/schema.sql` if your project permits it.
+5. Copy `.env.example` to `.env.local` and set:
+
+```bash
+VITE_SUPABASE_URL="https://your-project-ref.supabase.co"
+VITE_SUPABASE_ANON_KEY="your-supabase-anon-key"
+```
+
+The app uses the `toggle_card_like` SQL function to insert/delete the current anonymous user’s row in `card_likes`, recalculate `cards.likes_count`, and broadcast the updated count through Supabase Realtime.
+
+---
+
 ## Available scripts
 
 | Script | Description |
@@ -223,18 +257,18 @@ npm run lint
 
 ## Data and persistence
 
-LearnScroll is local-first. The app stores user state in browser `localStorage` under these keys:
+LearnScroll remains local-first for personal state. The app stores user state in browser `localStorage` under these keys:
 
 | Storage key | Purpose |
 | --- | --- |
 | `learnscroll_profile` | Username, email, selected interests, subscribed channels, and saved API key. |
 | `learnscroll_custom_cards` | AI-generated cards added after the seeded curriculum. |
 | `learnscroll_comments` | User-created comments. |
-| `learnscroll_likes` | IDs of liked cards. |
+| `learnscroll_likes` | IDs of liked cards when Supabase is not configured, plus a local cache of the current user's liked IDs when it is configured. |
 | `learnscroll_bookmarks` | IDs of bookmarked cards. |
 | `learnscroll_completed_reads` | IDs of cards marked as completed after viewing. |
 
-The Settings screen includes a reset option that clears all local app state.
+When Supabase is configured, shared seed cards and like counts come from the `cards` and `card_likes` tables. The Settings screen includes a reset option that clears local app state only; it does not delete Supabase data.
 
 ---
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bookmark, Trash2, ArrowUpDown, CornerDownRight, ExternalLink } from 'lucide-react';
 import { BookmarkMetadata, Card } from '../types';
@@ -31,7 +31,16 @@ export default function BookmarkView({
   onViewInFeed,
 }: BookmarkViewProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sortMethod, setSortMethod] = useState<BookmarkSortMethod>('date-added-desc');
+  const [sortMethod, setSortMethod] = useState<BookmarkSortMethod>(() => {
+    const savedSortMethod = localStorage.getItem('learnscroll_bookmark_sort_method');
+    return SORT_OPTIONS.some((option) => option.value === savedSortMethod)
+      ? (savedSortMethod as BookmarkSortMethod)
+      : 'date-added-desc';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('learnscroll_bookmark_sort_method', sortMethod);
+  }, [sortMethod]);
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));

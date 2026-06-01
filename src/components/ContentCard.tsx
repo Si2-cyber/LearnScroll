@@ -183,7 +183,7 @@ export default function ContentCard({
           className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center space-y-3.5 pointer-events-auto"
         >
           {[
-            { id: `like-${card.id}`, onClick: triggerLike, animate: likeAnimate, active: isLiked, activeClass: 'bg-red-500 border-red-600 text-white', icon: <Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />, label: String(card.likesCount + (isLiked ? 1 : 0)), tooltip: isLiked ? 'Unlike' : 'Like' },
+            { id: `like-${card.id}`, onClick: triggerLike, animate: likeAnimate, active: isLiked, activeClass: 'bg-red-500 border-red-600 text-white', icon: <Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />, label: String(card.likesCount), tooltip: isLiked ? 'Unlike' : 'Like' },
             { id: `star-${card.id}`, onClick: triggerStar, animate: starAnimate, active: isBookmarked, activeClass: 'bg-amber-500 border-amber-600 text-white', icon: <Star className={`h-4 w-4 ${isBookmarked ? 'fill-current' : ''}`} />, label: isBookmarked ? 'Saved' : 'Save', tooltip: isBookmarked ? 'Remove bookmark' : 'Save bookmark' },
             { id: `comment-${card.id}`, onClick: (e: React.MouseEvent<HTMLButtonElement>) => { stop(e); onCommentClick(); }, animate: false, active: false, activeClass: '', icon: <MessageSquare className="h-4 w-4" />, label: String(card.commentsCount), tooltip: 'Comment' },
             { id: `share-${card.id}`, onClick: handleShare, animate: false, active: false, activeClass: '', icon: <Share2 className="h-4 w-4" />, label: 'Share', tooltip: 'Share' },
